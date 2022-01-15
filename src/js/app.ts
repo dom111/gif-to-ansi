@@ -1,8 +1,12 @@
-import readImage from './readImage';
-import process from './process';
+import { Terminal } from 'xterm';
+import { FitAddon } from 'xterm-addon-fit';
 // @ts-ignore
 import { decompressFrames, ParsedFrame, parseGIF } from 'gifuct-js';
 import expandRange from './expandRange';
+import process from './process';
+import readImage from './readImage';
+
+import 'bootstrap/dist/js/bootstrap.bundle.min';
 
 type ANSIFrame = {
   ansiEscape: string;
@@ -71,15 +75,24 @@ const fileButton = document.querySelector('.parser .btn') as HTMLLabelElement,
   framesInput = document.querySelector(
     'input[name="frames"]'
   ) as HTMLInputElement,
-  terminalPreview = document.querySelector('pre.terminal') as HTMLPreElement,
+  loadUrlLinks = document.querySelectorAll('a.load-url') as NodeList,
+  terminal = new Terminal({
+    convertEol: true,
+    theme: {
+      background: '#272822',
+      cursor: 'transparent',
+      foreground: '#f8f8f2',
+    },
+  }),
+  fit = new FitAddon(),
   copyPaste = document.querySelector('pre.copy-paste code') as HTMLElement,
-  // animationDetails: {
-  //   index: number;
-  //   timeout: number | null;
-  // } = {
-  //   index: 0,
-  //   timeout: null,
-  // },
+  animationDetails: {
+    index: number;
+    timeout: number | null;
+  } = {
+    index: 0,
+    timeout: null,
+  },
   displayError = (error: string = '') => {
     if (error === '') {
       errorContainer.classList.add('d-none');
@@ -113,13 +126,6 @@ const fileButton = document.querySelector('.parser .btn') as HTMLLabelElement,
         const requiredFrames = expandRange(framesInput.value),
           frameData = frames.map(
             (frame: ParsedFrame, index: number): ANSIFrame => {
-              if (!requiredFrames.includes(index + 1)) {
-                return {
-                  ansiEscape: '',
-                  delay: 0,
-                };
-              }
-
               const frameCanvas = document.createElement(
                   'canvas'
                 ) as HTMLCanvasElement,
@@ -127,8 +133,8 @@ const fileButton = document.querySelector('.parser .btn') as HTMLLabelElement,
                   '2d'
                 ) as CanvasRenderingContext2D;
 
-              frameCanvas.height = frame.dims.height;
-              frameCanvas.width = frame.dims.width;
+              frameCanvas.height = canvas.height;
+              frameCanvas.width = canvas.width;
 
               const imageData = frameContext.createImageData(
                 frame.dims.width,
@@ -148,6 +154,14 @@ const fileButton = document.querySelector('.parser .btn') as HTMLLabelElement,
 
               context.drawImage(frameCanvas, 0, 0);
 
+              // if the frame isn't required we can avoid calling `process` here, but we still need to run the above
+              if (!requiredFrames.includes(index + 1)) {
+                return {
+                  ansiEscape: '',
+                  delay: 0,
+                };
+              }
+
               const ansiEscape = process(canvas, {
                 colours: coloursInputs.reduce((value: string, el) => {
                   if (el.checked) {
@@ -166,54 +180,53 @@ const fileButton = document.querySelector('.parser .btn') as HTMLLabelElement,
                 delay: frame.delay,
               };
             }
-          );
-        // TODO: this is horribly inefficient, mostly because of the re-render of terminal-preview... Investigating...
-        // ,
-        // showFrame = () => {
-        //     if (++animationDetails.index >= requiredFrames.length) {
-        //         animationDetails.index = 0;
-        //     }
-        //
-        //     const previous = document.querySelector('.terminal.clone:not([class~="d-none"])') as HTMLPreElement,
-        //         current = document.querySelector(`.terminal.clone[data-frame="${requiredFrames[animationDetails.index]}"]`) as HTMLPreElement;
-        //
-        //     if (previous) {
-        //         previous.classList.add('d-none');
-        //
-        //     }
-        //
-        //     if (! current) {
-        //         return null;
-        //     }
-        //
-        //     current.classList.remove('d-none');
-        //
-        //     return setTimeout(showFrame, frameData[requiredFrames[animationDetails.index] - 1].delay);
-        // };
+          ),
+          showFrame = () => {
+            if (++animationDetails.index >= requiredFrames.length) {
+              animationDetails.index = 0;
+            }
 
-        // if (animationDetails.timeout !== null) {
-        //   clearTimeout(animationDetails.timeout);
-        //   animationDetails.index = 0;
-        // }
-        //
-        // requiredFrames.forEach((index) => {
-        //   const clonedTerm = terminalPreview.cloneNode(true) as HTMLPreElement;
-        //
-        //   clonedTerm.classList.add('clone', 'd-none');
-        //   clonedTerm.dataset.frame = `${index}`;
-        //   clonedTerm.innerHTML = frameData[index - 1].ansiEscape;
-        //
-        //   terminalPreview.after(clonedTerm);
-        // });
-        //
-        // terminalPreview.classList.add('d-none');
-        // animationDetails.timeout = showFrame();
+            // terminal.reset();
+            terminal.write(
+              `\x1b[${
+                (
+                  frameData[
+                    requiredFrames[animationDetails.index] - 1
+                  ].ansiEscape.match(/\n/g) || []
+                ).length * (unicodeInput.checked ? 1 : 2)
+              }A`
+            );
+            terminal.write(
+              frameData[requiredFrames[animationDetails.index] - 1].ansiEscape
+            );
+
+            animationDetails.timeout = setTimeout(
+              showFrame,
+              frameData[requiredFrames[animationDetails.index] - 1].delay
+            );
+          };
+
+        if (animationDetails.timeout !== null) {
+          clearTimeout(animationDetails.timeout);
+          animationDetails.timeout = null;
+          animationDetails.index = 0;
+        }
+
+        showFrame();
+
+        terminal.resize(
+          terminal.cols,
+          (frameData[0].ansiEscape.match(/\n/g) || []).length + 1
+        );
 
         copyPaste.innerText = `${frameData
           .reduce((frames: string[], frameData: ANSIFrame, index: number) => {
             if (requiredFrames.includes(index + 1)) {
               frames.push(
-                `frame${index + 1}() {\nprintf "${frameData.ansiEscape}";\n}`
+                `frame${index + 1}() {\nprintf "${frameData.ansiEscape.replace(
+                  /\x1b/g,
+                  '\\e'
+                )}";\n}`
               );
             }
 
@@ -227,40 +240,57 @@ const fileButton = document.querySelector('.parser .btn') as HTMLLabelElement,
               `frame${index};\nsleep ${
                 frameData[index - 1].delay / 1000
               };\nprintf '\\e[${
-                frameData[index - 1].ansiEscape.match(/\n/g || []).length
+                (frameData[index - 1].ansiEscape.match(/\n/g) || []).length *
+                (unicodeInput.checked ? 1 : 2)
               }A';`
           )
           .join('\n\n')}\ndone\n`;
 
-        terminalPreview.innerText = frameData[requiredFrames[0] - 1].ansiEscape;
-
         displayError('');
-
-        // done();
       })
       .catch((e) => {
         displayError(e.message);
-        // done();
       })
       .finally(done),
-  generate = (done: () => void = () => {}) => {
+  generate = () => {
     const file = fileInput?.files?.[0],
-      url = urlInput.value;
+      url = urlInput.value,
+      done = () =>
+        [fileButton, urlContainer, optionsSection].forEach((el) =>
+          el.classList.remove('loading')
+        );
+
+    terminal.clear();
+
+    if (animationDetails.timeout !== null) {
+      clearTimeout(animationDetails.timeout);
+      animationDetails.timeout = null;
+      animationDetails.index = 0;
+    }
+
+    requestAnimationFrame(() =>
+      [fileButton, urlContainer, optionsSection].forEach((el) =>
+        el.classList.add('loading')
+      )
+    );
 
     if (file) {
-      readImage(file)
+      return readImage(file)
         .then((url) => processImage(url, done))
         .catch((e) => displayError(e.message));
-
-      return;
     }
 
     if (url) {
-      processImage(url, done);
+      return processImage(url, done);
     }
 
-    done();
+    return new Promise((resolve) => resolve(requestAnimationFrame(done)));
   };
+
+terminal.loadAddon(fit);
+terminal.open(document.querySelector('div.terminal') as HTMLDivElement);
+
+fit.fit();
 
 fileInput.addEventListener('input', () => {
   framesInput.value = '';
@@ -301,11 +331,7 @@ framesInput.addEventListener('change', () => {
     )
   );
 
-  generate(() =>
-    [fileButton, urlContainer, optionsSection].forEach((el) =>
-      el.classList.remove('loading')
-    )
-  );
+  generate();
 });
 
 framesInput.addEventListener('keydown', ({ key }) => {
@@ -316,11 +342,7 @@ framesInput.addEventListener('keydown', ({ key }) => {
       )
     );
 
-    generate(() =>
-      [fileButton, urlContainer, optionsSection].forEach((el) =>
-        el.classList.remove('loading')
-      )
-    );
+    generate();
   }
 });
 
@@ -335,20 +357,27 @@ framesInput.addEventListener('keydown', ({ key }) => {
   loopNInput,
 ].forEach((input) =>
   input.addEventListener('input', ({ target }) => {
-    requestAnimationFrame(() =>
-      [fileButton, urlContainer, optionsSection].forEach((el) =>
-        el.classList.add('loading')
-      )
-    );
-
-    generate(() => {
-      [fileButton, urlContainer, optionsSection].forEach((el) =>
-        el.classList.remove('loading')
-      );
-
+    generate().then(() => {
       if (target === urlInput) {
         urlInput.focus();
       }
     });
+  })
+);
+
+loadUrlLinks.forEach((link) =>
+  link.addEventListener('click', (event) => {
+    event.preventDefault();
+
+    const { url, colours } = (link as HTMLAnchorElement).dataset;
+
+    urlInput.value = url ?? '';
+    coloursInputs.forEach((input) => {
+      if (input.value === colours) {
+        input.checked = true;
+      }
+    });
+
+    generate();
   })
 );

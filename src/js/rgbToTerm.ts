@@ -1,8 +1,7 @@
 declare type Colour = [number, number, number];
 declare type TermColour = [...Colour, number];
 
-const cache: { [key: string]: number } = {},
-  colours: TermColour[] = [],
+const colours: TermColour[] = [],
   buildColours = (): void => {
     colours.push([0, 0, 0, 0]);
     colours.push([128, 0, 0, 1]);
@@ -66,13 +65,7 @@ export const rgbToTerm = (r: number, g: number, b: number) => {
     buildColours();
   }
 
-  const cacheKey = [r, g, b].toString();
-
-  if (cache[cacheKey]) {
-    return cache[cacheKey];
-  }
-
-  return (cache[cacheKey] = (best(colours, [r, g, b]) || [])[3]);
+  return (best(colours, [r, g, b]) || [])[3];
 };
 
 export default rgbToTerm;

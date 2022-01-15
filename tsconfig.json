@@ -5,6 +5,7 @@
       "es2019"
     ],
     "module": "es2015",
+    "moduleResolution": "node",
     "outDir": "dist/js",
     "sourceMap": true,
     "strict": true,

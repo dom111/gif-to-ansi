@@ -1,4 +1,5 @@
 const { sassPlugin } = require('esbuild-sass-plugin'),
+  { Prettier } = require('esbuild-plugin-prettier'),
   esbuild = require('esbuild'),
   buildOptions = {
     entryPoints: ['src/js/app.ts', 'src/css/app.scss'],
@@ -7,7 +8,7 @@ const { sassPlugin } = require('esbuild-sass-plugin'),
     sourcemap: true,
     watch: false,
     outdir: 'dist',
-    plugins: [sassPlugin()],
+    plugins: [sassPlugin(), new Prettier()],
   };
 
 process.argv.forEach((arg) => {
