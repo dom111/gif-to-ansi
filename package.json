@@ -1,6 +1,6 @@
 {
   "name": "gif-to-ansi",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A site to convert a GIF into a low-res shell script.",
   "scripts": {
     "build": "npm run prettier:format && npm run build:esbuild",
